@@ -1,5 +1,6 @@
 import os
 import json
+import urllib.parse
 import telebot
 import requests
 
@@ -87,14 +88,26 @@ def generate_txt_for_course(course_id, course_title):
                     recordings = cls.get("mp4Recordings", [])
                     
                     txt_content += f"  - Class: {title}\n"
+                    
+                    # Encode and write only valid PDF links
                     for pdf in pdfs:
-                        txt_content += f"    [PDF] {pdf.get('name')}: {pdf.get('url')}\n"
+                        raw_pdf_url = pdf.get('url', '')
+                        if raw_pdf_url:
+                            encoded_pdf_url = urllib.parse.quote(raw_pdf_url, safe=':/')
+                            txt_content += f"    [PDF] {pdf.get('name')}: {encoded_pdf_url}\n"
+                            
+                    # Filter and extract ONLY 480p recordings to keep file clean
                     for rec in recordings:
-                        txt_content += f"    [MP4 {rec.get('quality')}] Size: {rec.get('size')}MB : {rec.get('url')}\n"
+                        quality = str(rec.get('quality', ''))
+                        if '480' in quality:
+                            raw_vid_url = rec.get('url', '')
+                            if raw_vid_url:
+                                encoded_vid_url = urllib.parse.quote(raw_vid_url, safe=':/')
+                                txt_content += f"    [MP4 480p] Size: {rec.get('size')}MB : {encoded_vid_url}\n"
+                                
                     txt_content += "\n"
             txt_content += "\n"
             
-        # Clean filename using course title
         safe_title = "".join(c for c in course_title if c.isalnum() or c in (' ', '_', '-')).strip()
         filename = f"{safe_title}.txt"
         with open(filename, "w", encoding="utf-8") as f:
@@ -122,7 +135,7 @@ def handle_bulk(message):
         bot.send_message(message.chat.id, "❌ No active courses found for bulk extraction.")
         return
         
-    bot.send_message(message.chat.id, f"🚀 Bulk extraction started for *{len(courses)} batches*. Please wait, files will be sent one by one...", parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"🚀 Bulk extraction started for *{len(courses)} batches* (Only 480p & PDFs). Please wait...", parse_mode="Markdown")
     
     for c in courses:
         c_id = c['id']
@@ -160,7 +173,7 @@ def handle_text(message):
                 selected_title = c['title']
                 break
                 
-    bot.send_message(message.chat.id, f"⏳ Extracting data for: *{selected_title}*...\nPlease wait.", parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"⏳ Extracting data for: *{selected_title}* (Only 480p)... \nPlease wait.", parse_mode="Markdown")
     
     filename = generate_txt_for_course(selected_course_id, selected_title)
     if filename and os.path.exists(filename):
@@ -171,5 +184,5 @@ def handle_text(message):
         bot.send_message(message.chat.id, "❌ Failed to fetch batch data. Invalid Course ID.")
 
 if __name__ == "__main__":
-    print("🤖 Telegram Bot is running with Bulk & Auto Features...")
+    print("🤖 Telegram Bot is running with URL Encoding & 480p Filter...")
     bot.infinity_polling()
